@@ -280,15 +280,17 @@ type EbayMarketCardProps = {
 }
 
 function EbayMarketCard({ label, tab, section, formatPrice }: EbayMarketCardProps) {
+  const [expanded, setExpanded] = useState(false)
   const topListings = topEbayListings(section, tab)
+  const visibleListings = expanded ? topListings : topListings.slice(0, 4)
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 shadow-xl shadow-black/20">
-      <div className="border-b border-white/10 bg-white/[0.04] p-4">
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-xl shadow-black/20">
+      <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/95 p-3 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full border border-white/10 bg-white px-2.5 py-1 text-xs font-black shadow-lg shadow-black/20">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-white/10 bg-white px-2 py-0.5 text-xs font-black shadow-lg shadow-black/20">
                 <span className="text-[#e53238]">e</span>
                 <span className="text-[#0064d2]">B</span>
                 <span className="text-[#f5af02]">a</span>
@@ -298,30 +300,30 @@ function EbayMarketCard({ label, tab, section, formatPrice }: EbayMarketCardProp
                 UK
               </p>
             </div>
-            <h3 className="text-lg font-black text-white">eBay UK {label}</h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <h3 className="text-base font-black text-white">eBay UK {label}</h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">
               {section.count} listing{section.count === 1 ? "" : "s"}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-slate-500">Average</p>
-            <p className="font-black text-indigo-200">{formatPrice(section.average_price, "GBP")}</p>
+            <p className="text-[10px] text-slate-500">Average</p>
+            <p className="text-sm font-black text-indigo-200">{formatPrice(section.average_price, "GBP")}</p>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Lowest</p>
-            <p className="mt-1 text-lg font-black text-white">{formatPrice(section.min_price, "GBP")}</p>
+            <p className="mt-0.5 text-sm font-black text-white">{formatPrice(section.min_price, "GBP")}</p>
           </div>
-          <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 p-3">
+          <div className="rounded-xl border border-rose-300/20 bg-rose-400/10 p-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-rose-200">Highest</p>
-            <p className="mt-1 text-lg font-black text-white">{formatPrice(section.max_price, "GBP")}</p>
+            <p className="mt-0.5 text-sm font-black text-white">{formatPrice(section.max_price, "GBP")}</p>
           </div>
         </div>
       </div>
 
-      <div className="divide-y divide-white/10">
+      <div className="flex-1 divide-y divide-white/10">
         {section.error && (
           <div className="px-4 py-3 text-sm font-semibold text-amber-200">
             {section.error}
@@ -329,12 +331,12 @@ function EbayMarketCard({ label, tab, section, formatPrice }: EbayMarketCardProp
         )}
 
         {topListings.length ? (
-          topListings.map((listing, index) => (
+          visibleListings.map((listing, index) => (
             <div
               key={`${label}-${listing.item_url ?? index}`}
-              className="group grid grid-cols-[56px_1fr] gap-3 px-4 py-3 transition hover:bg-white/[0.06]"
+              className="group grid grid-cols-[44px_1fr] gap-2 px-3 py-2 transition hover:bg-white/[0.06]"
             >
-              <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+              <div className="h-12 w-10 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
                 {listing.image_url ? (
                   <Image
                     src={listing.image_url}
@@ -352,15 +354,15 @@ function EbayMarketCard({ label, tab, section, formatPrice }: EbayMarketCardProp
               </div>
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-lg font-black text-white">{formatPrice(listing.price, listing.currency)}</p>
+                  <p className="text-base font-black text-white">{formatPrice(listing.price, listing.currency)}</p>
                   <span className="shrink-0 rounded-full bg-indigo-400/15 px-2 py-1 text-[10px] font-black uppercase text-indigo-200">
                     #{index + 1}
                   </span>
                 </div>
-                <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-300">
+                <p className="mt-0.5 line-clamp-2 text-xs font-semibold text-slate-300">
                   {listing.title ?? "Untitled eBay listing"}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
+                <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] font-bold text-slate-500">
                   {listing.condition && (
                     <span className="rounded-full bg-white/5 px-2 py-1">{listing.condition}</span>
                   )}
@@ -387,6 +389,16 @@ function EbayMarketCard({ label, tab, section, formatPrice }: EbayMarketCardProp
           </div>
         )}
       </div>
+
+      {topListings.length > 4 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="border-t border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-black text-indigo-200 transition hover:bg-white/[0.08] hover:text-indigo-100"
+        >
+          {expanded ? "View Less" : `View More (${topListings.length - 4})`}
+        </button>
+      )}
     </article>
   )
 }
@@ -630,6 +642,7 @@ export default function Home() {
                 ))}
               </div>
 
+              {activeTab === "raw" && (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
                   Sort listings
@@ -651,10 +664,15 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
 
             {visibleMarketplaceCards ? (
-              <div className="grid gap-4 p-4 lg:grid-cols-2">
+              <div
+                className={`grid items-stretch gap-3 p-3 sm:p-4 ${
+                  activeTab === "raw" ? "lg:grid-cols-3" : "lg:max-w-xl lg:grid-cols-1"
+                }`}
+              >
                 {groupedMarketplaces.map(({ marketplace, listings, cheapest }) => (
                   <MarketplaceColumn
                     key={marketplace}
@@ -664,6 +682,8 @@ export default function Home() {
                     cheapestPrice={cheapestPrice}
                     savingsDifference={savingsDifference}
                     groupGradedByCompany={activeTab !== "raw"}
+                    compact
+                    defaultVisibleCount={4}
                     formatMarketplaceName={formatMarketplaceName}
                     formatPrice={formatPrice}
                   />
