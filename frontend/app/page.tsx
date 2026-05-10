@@ -691,6 +691,17 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        {!loading && result && (
+          <details className="overflow-hidden rounded-3xl border border-amber-300/20 bg-slate-950/80 shadow-xl shadow-black/30">
+            <summary className="cursor-pointer border-b border-amber-300/20 bg-amber-400/10 px-5 py-4 text-xs font-black uppercase tracking-[0.28em] text-amber-200">
+              DEBUG RESPONSE
+            </summary>
+            <pre className="max-h-96 overflow-auto p-4 text-xs leading-5 text-slate-300">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          </details>
+        )}
       </div>
     </main>
   )

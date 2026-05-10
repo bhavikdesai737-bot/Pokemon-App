@@ -77,11 +77,32 @@ async def get_ebay_uk_response(card_number: str):
         }
 
 
+def normalize_search_response_shape(response: dict):
+    """Keep /search responses on the canonical shape while tolerating legacy eBay payloads."""
+    if not isinstance(response, dict):
+        return response
+
+    ebay = response.get("uk", {}).get("ebay") if isinstance(response.get("uk"), dict) else None
+    if not ebay and all(key in response for key in ("raw", "psa", "ace")):
+        ebay = {
+            "raw": response.pop("raw"),
+            "psa": response.pop("psa"),
+            "ace": response.pop("ace"),
+        }
+        if "error" in response:
+            ebay["error"] = response.pop("error")
+
+    if ebay:
+        response["uk"] = {"ebay": ebay}
+
+    return response
+
+
 async def build_search_response(card_number: str):
     normalized_card_number = normalize_card_number(card_number)
     cached_result = await asyncio.to_thread(get_cached_search_result, normalized_card_number)
     if cached_result and "uk" in cached_result:
-        return cached_result
+        return normalize_search_response_shape(cached_result)
 
     result, ebay = await asyncio.gather(
         scrape_and_save_card(normalized_card_number),
@@ -96,6 +117,7 @@ async def build_search_response(card_number: str):
             "ebay": ebay,
         },
     }
+    response = normalize_search_response_shape(response)
     await asyncio.to_thread(save_search_cache, normalized_card_number, response)
     return response
 
