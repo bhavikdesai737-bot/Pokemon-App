@@ -1,0 +1,15 @@
+{
+  "name": "pokemon-price-app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "backend": "cd backend && venv\\Scripts\\python.exe -m uvicorn main:app --port 8002",
+    "frontend": "cd frontend && npm run dev"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
+
