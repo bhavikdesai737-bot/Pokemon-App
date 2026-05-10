@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import CardHeader from "@/components/CardHeader"
 import MarketplaceColumn from "@/components/MarketplaceColumn"
 import PriceHistoryChart, { type PriceHistoryPoint } from "@/components/PriceHistoryChart"
@@ -23,6 +24,36 @@ type SearchResult = {
   card_number: string
   japan: Record<string, MarketplaceResult | MarketplaceResult[]>
   graded?: Record<string, MarketplaceResult | MarketplaceResult[]>
+  uk?: {
+    ebay?: EbayPricingResult
+  }
+}
+
+type EbayListing = {
+  title: string | null
+  price: number | null
+  currency: string | null
+  condition: string | null
+  item_url: string | null
+  image_url: string | null
+  seller_username: string | null
+  buying_options: string[]
+}
+
+type EbayPriceSection = {
+  count: number
+  min_price: number | null
+  max_price: number | null
+  average_price: number | null
+  listings: EbayListing[]
+  error?: string
+}
+
+type EbayPricingResult = {
+  raw: EbayPriceSection
+  psa: EbayPriceSection
+  ace: EbayPriceSection
+  error?: string
 }
 
 type HistoryResult = {
@@ -106,7 +137,7 @@ function formatPrice(price: number | null, currency: string | null) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: currency ?? "USD",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(price)
 }
 
@@ -160,6 +191,13 @@ function splitMarketplaceDataByTab(listings: MarketplaceCard[]) {
     },
     { raw: [], psa: [], ace: [] }
   )
+}
+
+function topEbayListings(section: EbayPriceSection) {
+  return [...(section.listings ?? [])]
+    .filter((listing) => typeof listing.price === "number")
+    .sort((a, b) => (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER))
+    .slice(0, 3)
 }
 
 export default function Home() {
@@ -319,6 +357,14 @@ export default function Home() {
       cheapest: marketplaceCheapest,
     }
   })
+  const ebayPricing = result?.uk?.ebay
+  const ebaySections = ebayPricing
+    ? listingTabs.map((tab) => ({
+        ...tab,
+        section: ebayPricing[tab.value],
+        topListings: topEbayListings(ebayPricing[tab.value]),
+      }))
+    : []
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#1e3a8a_0,#020617_34%,#020617_100%)] px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
@@ -467,6 +513,149 @@ export default function Home() {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {!loading && result && ebayPricing && (
+          <section className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 shadow-2xl shadow-black/40">
+            <div className="flex flex-col gap-4 border-b border-white/10 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white px-3 py-1 text-sm font-black shadow-lg shadow-black/20">
+                    <span className="text-[#e53238]">e</span>
+                    <span className="text-[#0064d2]">B</span>
+                    <span className="text-[#f5af02]">a</span>
+                    <span className="text-[#86b817]">y</span>
+                    <span className="ml-2 text-slate-900">UK</span>
+                  </span>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-indigo-200">
+                    UK market
+                  </p>
+                </div>
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl">
+                  eBay UK pricing
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                  Listed prices grouped by raw, PSA, and ACE results from the eBay Browse API.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-indigo-300/20 bg-indigo-400/10 px-4 py-3 text-sm font-bold text-indigo-100">
+                {ebaySections.reduce((total, section) => total + (section.section?.count ?? 0), 0)} UK listings
+              </div>
+            </div>
+
+            {ebayPricing.error && (
+              <div className="border-b border-amber-300/20 bg-amber-400/10 px-5 py-3 text-sm font-semibold text-amber-100">
+                eBay warning: {ebayPricing.error}
+              </div>
+            )}
+
+            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-3">
+              {ebaySections.map(({ value, label, section, topListings }) => (
+                <article
+                  key={value}
+                  className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 shadow-xl shadow-black/20"
+                >
+                  <div className="border-b border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-200">
+                          {label}
+                        </p>
+                        <h3 className="mt-1 text-xl font-black text-white">
+                          {formatPrice(section.average_price, "GBP")}
+                        </h3>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Average listed price</p>
+                      </div>
+                      <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-slate-200">
+                        {section.count} listings
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">
+                          Lowest
+                        </p>
+                        <p className="mt-1 text-lg font-black text-white">
+                          {formatPrice(section.min_price, "GBP")}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-200">
+                          Highest
+                        </p>
+                        <p className="mt-1 text-lg font-black text-white">
+                          {formatPrice(section.max_price, "GBP")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-white/10">
+                    {section.error && (
+                      <div className="px-4 py-3 text-sm font-semibold text-amber-200">
+                        {section.error}
+                      </div>
+                    )}
+
+                    {topListings.length ? (
+                      topListings.map((listing, index) => (
+                        <a
+                          key={`${value}-${listing.item_url ?? index}`}
+                          href={listing.item_url ?? undefined}
+                          target={listing.item_url ? "_blank" : undefined}
+                          rel={listing.item_url ? "noreferrer" : undefined}
+                          className="group grid grid-cols-[56px_1fr] gap-3 px-4 py-3 transition hover:bg-white/[0.06]"
+                        >
+                          <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+                            {listing.image_url ? (
+                              <Image
+                                src={listing.image_url}
+                                alt={listing.title ?? "eBay listing"}
+                                width={48}
+                                height={56}
+                                unoptimized
+                                className="h-full w-full object-cover transition group-hover:scale-105"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[9px] font-black uppercase tracking-wider text-slate-600">
+                                eBay
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-lg font-black text-white">
+                                {formatPrice(listing.price, listing.currency)}
+                              </p>
+                              <span className="shrink-0 rounded-full bg-indigo-400/15 px-2 py-1 text-[10px] font-black uppercase text-indigo-200">
+                                #{index + 1}
+                              </span>
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-300">
+                              {listing.title ?? "Untitled eBay listing"}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
+                              {listing.condition && (
+                                <span className="rounded-full bg-white/5 px-2 py-1">{listing.condition}</span>
+                              )}
+                              {listing.seller_username && (
+                                <span className="rounded-full bg-white/5 px-2 py-1">@{listing.seller_username}</span>
+                              )}
+                            </div>
+                          </div>
+                        </a>
+                      ))
+                    ) : (
+                      <div className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                        No eBay {label} listings found.
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
         )}
       </div>
