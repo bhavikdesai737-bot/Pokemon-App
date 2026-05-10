@@ -27,6 +27,10 @@ type SearchResult = {
   uk?: {
     ebay?: EbayPricingResult
   }
+  raw?: EbayPriceSection
+  psa?: EbayPriceSection
+  ace?: EbayPriceSection
+  error?: string
 }
 
 type EbayListing = {
@@ -197,7 +201,28 @@ function topEbayListings(section: EbayPriceSection) {
   return [...(section.listings ?? [])]
     .filter((listing) => typeof listing.price === "number")
     .sort((a, b) => (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER))
-    .slice(0, 3)
+    .slice(0, 5)
+}
+
+function getEbayPricing(result: SearchResult | null): EbayPricingResult | null {
+  if (!result) {
+    return null
+  }
+
+  if (result.uk?.ebay) {
+    return result.uk.ebay
+  }
+
+  if (result.raw && result.psa && result.ace) {
+    return {
+      raw: result.raw,
+      psa: result.psa,
+      ace: result.ace,
+      error: result.error,
+    }
+  }
+
+  return null
 }
 
 export default function Home() {
@@ -252,6 +277,7 @@ export default function Home() {
       }
 
       const data: SearchResult = await res.json()
+      console.log("Full search result", data)
       setResult(data)
 
       try {
@@ -357,7 +383,7 @@ export default function Home() {
       cheapest: marketplaceCheapest,
     }
   })
-  const ebayPricing = result?.uk?.ebay
+  const ebayPricing = getEbayPricing(result)
   const ebaySections = ebayPricing
     ? listingTabs.map((tab) => ({
         ...tab,
@@ -533,7 +559,7 @@ export default function Home() {
                   </p>
                 </div>
                 <h2 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl">
-                  eBay UK pricing
+                  UK eBay Market
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
                   Listed prices grouped by raw, PSA, and ACE results from the eBay Browse API.
@@ -601,11 +627,8 @@ export default function Home() {
 
                     {topListings.length ? (
                       topListings.map((listing, index) => (
-                        <a
+                        <div
                           key={`${value}-${listing.item_url ?? index}`}
-                          href={listing.item_url ?? undefined}
-                          target={listing.item_url ? "_blank" : undefined}
-                          rel={listing.item_url ? "noreferrer" : undefined}
                           className="group grid grid-cols-[56px_1fr] gap-3 px-4 py-3 transition hover:bg-white/[0.06]"
                         >
                           <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
@@ -644,8 +667,18 @@ export default function Home() {
                                 <span className="rounded-full bg-white/5 px-2 py-1">@{listing.seller_username}</span>
                               )}
                             </div>
+                            {listing.item_url && (
+                              <a
+                                href={listing.item_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-3 inline-flex rounded-full bg-indigo-300 px-3 py-1 text-xs font-black text-slate-950 transition hover:bg-indigo-200"
+                              >
+                                View Listing
+                              </a>
+                            )}
                           </div>
-                        </a>
+                        </div>
                       ))
                     ) : (
                       <div className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
