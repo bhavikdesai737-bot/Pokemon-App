@@ -37,7 +37,45 @@ QUERY_TEMPLATES = {
 }
 
 
-def _empty_section(error=None):
+class EbayConfigError(RuntimeError):
+    """Raised when required eBay credentials are missing."""
+
+
+class EbayOAuthError(RuntimeError):
+    """Raised when eBay OAuth token retrieval fails."""
+
+
+class EbayBrowseAPIError(RuntimeError):
+    """Raised when the eBay Browse API search fails."""
+
+
+def _response_error_detail(response):
+    try:
+        body = response.text[:1000]
+    except Exception:
+        body = "<unable to read response body>"
+
+    return {
+        "status_code": response.status_code,
+        "url": response.url,
+        "body": body,
+    }
+
+
+def _error_detail(exc, stage):
+    detail = {
+        "stage": stage,
+        "type": type(exc).__name__,
+        "message": str(exc),
+    }
+    cause = getattr(exc, "__cause__", None)
+    response = getattr(exc, "response", None) or getattr(cause, "response", None)
+    if response is not None:
+        detail["response"] = _response_error_detail(response)
+    return detail
+
+
+def _empty_section(error=None, error_detail=None):
     section = {
         "count": 0,
         "min_price": None,
@@ -47,10 +85,12 @@ def _empty_section(error=None):
     }
     if error:
         section["error"] = error
+    if error_detail:
+        section["error_detail"] = error_detail
     return section
 
 
-def _empty_result(error=None):
+def _empty_result(error=None, error_detail=None):
     result = {
         "raw": _empty_section(),
         "psa": _empty_section(),
@@ -58,6 +98,8 @@ def _empty_result(error=None):
     }
     if error:
         result["error"] = error
+    if error_detail:
+        result["error_detail"] = error_detail
     return result
 
 
@@ -76,26 +118,39 @@ def _get_access_token():
     client_secret = config["client_secret"]
 
     if not client_id or not client_secret:
-        raise ValueError("Missing EBAY_CLIENT_ID or EBAY_CLIENT_SECRET")
+        missing = [
+            name
+            for name, value in (
+                ("EBAY_CLIENT_ID", client_id),
+                ("EBAY_CLIENT_SECRET", client_secret),
+            )
+            if not value
+        ]
+        raise EbayConfigError(f"Missing required eBay credentials: {', '.join(missing)}")
     if config["env"] != "PRODUCTION":
         logger.warning("Only eBay production endpoints are configured; EBAY_ENV=%s", config["env"])
 
     logger.info("Requesting eBay OAuth token")
-    response = requests.post(
-        TOKEN_URL,
-        auth=(client_id, client_secret),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={
-            "grant_type": "client_credentials",
-            "scope": EBAY_SCOPE,
-        },
-        timeout=20,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            TOKEN_URL,
+            auth=(client_id, client_secret),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "client_credentials",
+                "scope": EBAY_SCOPE,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise EbayOAuthError("eBay OAuth token request failed") from exc
+    except requests.RequestException as exc:
+        raise EbayOAuthError(f"eBay OAuth request error: {exc}") from exc
 
     token = response.json().get("access_token")
     if not token:
-        raise ValueError("eBay OAuth response did not include an access token")
+        raise EbayOAuthError("eBay OAuth response did not include an access token")
 
     return token
 
@@ -149,20 +204,25 @@ def _summarize_listings(listings):
 
 def _search_ebay(query, token, marketplace_id, limit=20):
     logger.info("Searching eBay UK Browse API for query=%r", query)
-    response = requests.get(
-        BROWSE_SEARCH_URL,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "X-EBAY-C-MARKETPLACE-ID": marketplace_id,
-            "Accept": "application/json",
-        },
-        params={
-            "q": query,
-            "limit": limit,
-        },
-        timeout=25,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            BROWSE_SEARCH_URL,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-EBAY-C-MARKETPLACE-ID": marketplace_id,
+                "Accept": "application/json",
+            },
+            params={
+                "q": query,
+                "limit": limit,
+            },
+            timeout=25,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise EbayBrowseAPIError(f"eBay Browse API request failed for query={query!r}") from exc
+    except requests.RequestException as exc:
+        raise EbayBrowseAPIError(f"eBay Browse API request error for query={query!r}: {exc}") from exc
 
     items = response.json().get("itemSummaries") or []
     listings = []
@@ -202,7 +262,10 @@ def get_ebay_uk_prices(card_number: str):
                 results[section] = _search_ebay(query, token, marketplace_id)
             except Exception as exc:
                 logger.exception("eBay search failed for section=%s card_number=%s", section, normalized_card_number)
-                results[section] = _empty_section(f"{type(exc).__name__}: {exc}")
+                results[section] = _empty_section(
+                    f"{type(exc).__name__}: {exc}",
+                    _error_detail(exc, "browse_api"),
+                )
 
         return {
             "raw": results.get("raw", _empty_section()),
@@ -211,4 +274,5 @@ def get_ebay_uk_prices(card_number: str):
         }
     except Exception as exc:
         logger.exception("eBay UK price lookup failed for card_number=%s", card_number)
-        return _empty_result(f"{type(exc).__name__}: {exc}")
+        stage = "credentials" if isinstance(exc, EbayConfigError) else "oauth"
+        return _empty_result(f"{type(exc).__name__}: {exc}", _error_detail(exc, stage))

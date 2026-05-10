@@ -175,6 +175,28 @@ async def debug_collectr(card_number: str):
         )
 
 
+@app.get("/debug/ebay/{card_number}")
+async def debug_ebay(card_number: str):
+    normalized_card_number = normalize_card_number(card_number)
+    logger.info("Starting eBay debug lookup for card_number=%s", normalized_card_number)
+
+    try:
+        result = await asyncio.to_thread(get_ebay_uk_prices, normalized_card_number)
+        logger.info("Finished eBay debug lookup for card_number=%s", normalized_card_number)
+        return result
+    except Exception as exc:
+        logger.exception("Unexpected eBay debug lookup failure for card_number=%s", normalized_card_number)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Unexpected eBay debug lookup failure",
+                "type": type(exc).__name__,
+                "detail": str(exc),
+                "card_number": normalized_card_number,
+            },
+        )
+
+
 @app.get("/history/{card_number}")
 def price_history(card_number: str):
     normalized_card_number = normalize_card_number(card_number)
