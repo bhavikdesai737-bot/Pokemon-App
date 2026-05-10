@@ -30,6 +30,7 @@ BAD_TITLE_TERMS = (
     "empty",
     "pack",
 )
+GRADING_TERMS = ("psa", "ace", "cgc", "bgs", "graded")
 QUERY_TEMPLATES = {
     "raw": "{card_number} Pokemon card",
     "psa": "{card_number} Pokemon PSA",
@@ -160,6 +161,23 @@ def _bad_title(title):
     return any(term in normalized_title for term in BAD_TITLE_TERMS)
 
 
+def _matches_ebay_section(title, section):
+    normalized_title = str(title or "").lower()
+
+    if section == "raw":
+        return not any(term in normalized_title for term in GRADING_TERMS)
+    if section == "psa":
+        return "psa" in normalized_title and not any(
+            term in normalized_title for term in ("ace", "cgc", "bgs")
+        )
+    if section == "ace":
+        return "ace" in normalized_title and not any(
+            term in normalized_title for term in ("psa", "cgc", "bgs")
+        )
+
+    return True
+
+
 def _parse_price(price_data: dict[str, Any] | None):
     if not price_data:
         return None, None
@@ -202,8 +220,8 @@ def _summarize_listings(listings):
     }
 
 
-def _search_ebay(query, token, marketplace_id, limit=20):
-    logger.info("Searching eBay UK Browse API for query=%r", query)
+def _search_ebay(query, token, marketplace_id, section, limit=20):
+    logger.info("Searching eBay UK Browse API for section=%s query=%r", section, query)
     try:
         response = requests.get(
             BROWSE_SEARCH_URL,
@@ -231,6 +249,9 @@ def _search_ebay(query, token, marketplace_id, limit=20):
         if _bad_title(title):
             logger.debug("Skipping filtered eBay title: %s", title)
             continue
+        if not _matches_ebay_section(title, section):
+            logger.debug("Skipping eBay title for wrong section=%s: %s", section, title)
+            continue
 
         listing = _normalize_listing(item)
         if listing["price"] is None:
@@ -239,7 +260,7 @@ def _search_ebay(query, token, marketplace_id, limit=20):
 
         listings.append(listing)
 
-    logger.info("eBay query=%r returned %s usable listings", query, len(listings))
+    logger.info("eBay section=%s query=%r returned %s usable listings", section, query, len(listings))
     return _summarize_listings(listings)
 
 
@@ -259,7 +280,7 @@ def get_ebay_uk_prices(card_number: str):
         for section, template in QUERY_TEMPLATES.items():
             query = template.format(card_number=normalized_card_number)
             try:
-                results[section] = _search_ebay(query, token, marketplace_id)
+                results[section] = _search_ebay(query, token, marketplace_id, section)
             except Exception as exc:
                 logger.exception("eBay search failed for section=%s card_number=%s", section, normalized_card_number)
                 results[section] = _empty_section(

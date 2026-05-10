@@ -225,6 +225,124 @@ function getEbayPricing(result: SearchResult | null): EbayPricingResult | null {
   return null
 }
 
+type EbayMarketCardProps = {
+  label: string
+  section: EbayPriceSection
+  formatPrice: (price: number | null, currency: string | null) => string
+}
+
+function EbayMarketCard({ label, section, formatPrice }: EbayMarketCardProps) {
+  const topListings = topEbayListings(section)
+
+  return (
+    <article className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 shadow-xl shadow-black/20">
+      <div className="border-b border-white/10 bg-white/[0.04] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-white/10 bg-white px-2.5 py-1 text-xs font-black shadow-lg shadow-black/20">
+                <span className="text-[#e53238]">e</span>
+                <span className="text-[#0064d2]">B</span>
+                <span className="text-[#f5af02]">a</span>
+                <span className="text-[#86b817]">y</span>
+              </span>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-200">
+                UK
+              </p>
+            </div>
+            <h3 className="text-lg font-black text-white">eBay UK {label}</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {section.count} listing{section.count === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-500">Average</p>
+            <p className="font-black text-indigo-200">{formatPrice(section.average_price, "GBP")}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Lowest</p>
+            <p className="mt-1 text-lg font-black text-white">{formatPrice(section.min_price, "GBP")}</p>
+          </div>
+          <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 p-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-rose-200">Highest</p>
+            <p className="mt-1 text-lg font-black text-white">{formatPrice(section.max_price, "GBP")}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="divide-y divide-white/10">
+        {section.error && (
+          <div className="px-4 py-3 text-sm font-semibold text-amber-200">
+            {section.error}
+          </div>
+        )}
+
+        {topListings.length ? (
+          topListings.map((listing, index) => (
+            <div
+              key={`${label}-${listing.item_url ?? index}`}
+              className="group grid grid-cols-[56px_1fr] gap-3 px-4 py-3 transition hover:bg-white/[0.06]"
+            >
+              <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+                {listing.image_url ? (
+                  <Image
+                    src={listing.image_url}
+                    alt={listing.title ?? "eBay listing"}
+                    width={48}
+                    height={56}
+                    unoptimized
+                    className="h-full w-full object-cover transition group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[9px] font-black uppercase tracking-wider text-slate-600">
+                    eBay
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-lg font-black text-white">{formatPrice(listing.price, listing.currency)}</p>
+                  <span className="shrink-0 rounded-full bg-indigo-400/15 px-2 py-1 text-[10px] font-black uppercase text-indigo-200">
+                    #{index + 1}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-300">
+                  {listing.title ?? "Untitled eBay listing"}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
+                  {listing.condition && (
+                    <span className="rounded-full bg-white/5 px-2 py-1">{listing.condition}</span>
+                  )}
+                  {listing.seller_username && (
+                    <span className="rounded-full bg-white/5 px-2 py-1">@{listing.seller_username}</span>
+                  )}
+                </div>
+                {listing.item_url && (
+                  <a
+                    href={listing.item_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex rounded-full bg-indigo-300 px-3 py-1 text-xs font-black text-slate-950 transition hover:bg-indigo-200"
+                  >
+                    View Listing
+                  </a>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+            No eBay {label} listings found.
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
 export default function Home() {
   const [card, setCard] = useState("155-XY-P")
   const [result, setResult] = useState<SearchResult | null>(null)
@@ -304,7 +422,7 @@ export default function Home() {
   }
 
   const marketplaces: MarketplaceCard[] = result
-    ? Object.entries({ ...result.japan, ...(result.graded ?? {}) }).flatMap(([marketplace, details]) => {
+    ? Object.entries(result.japan).flatMap(([marketplace, details]) => {
         const listings = Array.isArray(details) ? details : [details]
         return listings.map((listing, index) => ({
           ...listing,
@@ -313,11 +431,14 @@ export default function Home() {
         }))
       })
     : []
+  const ebayPricing = getEbayPricing(result)
+  const activeEbaySection = ebayPricing?.[activeTab] ?? null
   const marketplaceDataByTab = splitMarketplaceDataByTab(marketplaces)
-  const activeMarketplaceData = marketplaceDataByTab[activeTab]
+  const activeMarketplaceData = activeTab === "raw" ? marketplaceDataByTab.raw : []
   const tabCounts = listingTabs.reduce<Record<ListingTab, number>>(
     (counts, tab) => {
-      counts[tab.value] = marketplaceDataByTab[tab.value].length
+      const japaneseCount = tab.value === "raw" ? marketplaceDataByTab.raw.length : 0
+      counts[tab.value] = japaneseCount + (ebayPricing?.[tab.value]?.count ?? 0)
       return counts
     },
     { raw: 0, psa: 0, ace: 0 }
@@ -383,14 +504,7 @@ export default function Home() {
       cheapest: marketplaceCheapest,
     }
   })
-  const ebayPricing = getEbayPricing(result)
-  const ebaySections = ebayPricing
-    ? listingTabs.map((tab) => ({
-        ...tab,
-        section: ebayPricing[tab.value],
-        topListings: topEbayListings(ebayPricing[tab.value]),
-      }))
-    : []
+  const visibleMarketplaceCards = groupedMarketplaces.length + (activeEbaySection ? 1 : 0)
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#1e3a8a_0,#020617_34%,#020617_100%)] px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
@@ -459,8 +573,8 @@ export default function Home() {
             <CardHeader
               cardHero={cardHero}
               cardNumber={result.card_number}
-              listingsCount={activeMarketplaceData.length}
-              marketsCount={groupedMarketplaces.length}
+              listingsCount={tabCounts[activeTab]}
+              marketsCount={visibleMarketplaceCards}
               cheapestPrice={cheapestPrice}
               cheapestCurrency={cheapestListing?.currency ?? "JPY"}
               formatPrice={formatPrice}
@@ -515,7 +629,7 @@ export default function Home() {
               </div>
             </div>
 
-            {activeMarketplaceData.length ? (
+            {visibleMarketplaceCards ? (
               <div className="grid gap-4 p-4 lg:grid-cols-2">
                 {groupedMarketplaces.map(({ marketplace, listings, cheapest }) => (
                   <MarketplaceColumn
@@ -530,6 +644,13 @@ export default function Home() {
                     formatPrice={formatPrice}
                   />
                 ))}
+                {activeEbaySection && (
+                  <EbayMarketCard
+                    label={listingTabs.find((tab) => tab.value === activeTab)?.label ?? "Raw"}
+                    section={activeEbaySection}
+                    formatPrice={formatPrice}
+                  />
+                )}
               </div>
             ) : (
               <div className="p-4">
@@ -540,167 +661,6 @@ export default function Home() {
               </div>
             )}
           </section>
-        )}
-
-        {!loading && result && ebayPricing && (
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 shadow-2xl shadow-black/40">
-            <div className="flex flex-col gap-4 border-b border-white/10 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white px-3 py-1 text-sm font-black shadow-lg shadow-black/20">
-                    <span className="text-[#e53238]">e</span>
-                    <span className="text-[#0064d2]">B</span>
-                    <span className="text-[#f5af02]">a</span>
-                    <span className="text-[#86b817]">y</span>
-                    <span className="ml-2 text-slate-900">UK</span>
-                  </span>
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-indigo-200">
-                    UK market
-                  </p>
-                </div>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl">
-                  UK eBay Market
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                  Listed prices grouped by raw, PSA, and ACE results from the eBay Browse API.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-indigo-300/20 bg-indigo-400/10 px-4 py-3 text-sm font-bold text-indigo-100">
-                {ebaySections.reduce((total, section) => total + (section.section?.count ?? 0), 0)} UK listings
-              </div>
-            </div>
-
-            {ebayPricing.error && (
-              <div className="border-b border-amber-300/20 bg-amber-400/10 px-5 py-3 text-sm font-semibold text-amber-100">
-                eBay warning: {ebayPricing.error}
-              </div>
-            )}
-
-            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-3">
-              {ebaySections.map(({ value, label, section, topListings }) => (
-                <article
-                  key={value}
-                  className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 shadow-xl shadow-black/20"
-                >
-                  <div className="border-b border-white/10 bg-white/[0.04] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-200">
-                          {label}
-                        </p>
-                        <h3 className="mt-1 text-xl font-black text-white">
-                          {formatPrice(section.average_price, "GBP")}
-                        </h3>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">Average listed price</p>
-                      </div>
-                      <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-black text-slate-200">
-                        {section.count} listings
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">
-                          Lowest
-                        </p>
-                        <p className="mt-1 text-lg font-black text-white">
-                          {formatPrice(section.min_price, "GBP")}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 p-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-200">
-                          Highest
-                        </p>
-                        <p className="mt-1 text-lg font-black text-white">
-                          {formatPrice(section.max_price, "GBP")}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="divide-y divide-white/10">
-                    {section.error && (
-                      <div className="px-4 py-3 text-sm font-semibold text-amber-200">
-                        {section.error}
-                      </div>
-                    )}
-
-                    {topListings.length ? (
-                      topListings.map((listing, index) => (
-                        <div
-                          key={`${value}-${listing.item_url ?? index}`}
-                          className="group grid grid-cols-[56px_1fr] gap-3 px-4 py-3 transition hover:bg-white/[0.06]"
-                        >
-                          <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
-                            {listing.image_url ? (
-                              <Image
-                                src={listing.image_url}
-                                alt={listing.title ?? "eBay listing"}
-                                width={48}
-                                height={56}
-                                unoptimized
-                                className="h-full w-full object-cover transition group-hover:scale-105"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[9px] font-black uppercase tracking-wider text-slate-600">
-                                eBay
-                              </div>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-lg font-black text-white">
-                                {formatPrice(listing.price, listing.currency)}
-                              </p>
-                              <span className="shrink-0 rounded-full bg-indigo-400/15 px-2 py-1 text-[10px] font-black uppercase text-indigo-200">
-                                #{index + 1}
-                              </span>
-                            </div>
-                            <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-300">
-                              {listing.title ?? "Untitled eBay listing"}
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
-                              {listing.condition && (
-                                <span className="rounded-full bg-white/5 px-2 py-1">{listing.condition}</span>
-                              )}
-                              {listing.seller_username && (
-                                <span className="rounded-full bg-white/5 px-2 py-1">@{listing.seller_username}</span>
-                              )}
-                            </div>
-                            {listing.item_url && (
-                              <a
-                                href={listing.item_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-3 inline-flex rounded-full bg-indigo-300 px-3 py-1 text-xs font-black text-slate-950 transition hover:bg-indigo-200"
-                              >
-                                View Listing
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
-                        No eBay {label} listings found.
-                      </div>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {!loading && result && (
-          <details className="overflow-hidden rounded-3xl border border-amber-300/20 bg-slate-950/80 shadow-xl shadow-black/30">
-            <summary className="cursor-pointer border-b border-amber-300/20 bg-amber-400/10 px-5 py-4 text-xs font-black uppercase tracking-[0.28em] text-amber-200">
-              DEBUG RESPONSE
-            </summary>
-            <pre className="max-h-96 overflow-auto p-4 text-xs leading-5 text-slate-300">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </details>
         )}
       </div>
     </main>
