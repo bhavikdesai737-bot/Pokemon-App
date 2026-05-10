@@ -53,7 +53,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
 
 async function apiFetch(path: string, init?: RequestInit) {
   if (!API_BASE_URL) {
-    throw new Error("Missing NEXT_PUBLIC_API_URL. Set it to your backend URL, for example http://127.0.0.1:8002.")
+    throw new Error(
+      "Missing NEXT_PUBLIC_API_URL. Set it to your backend URL, for example https://pokemon-app-production-b738.up.railway.app."
+    )
   }
 
   const url = `${API_BASE_URL}${path}`
@@ -68,6 +70,14 @@ async function apiFetch(path: string, init?: RequestInit) {
   } catch (err) {
     console.error(`[Pokemon API] ${method} ${url} failed`, err)
     throw new Error(`Backend is offline or unreachable at ${API_BASE_URL}. Check NEXT_PUBLIC_API_URL and start the backend.`)
+  }
+}
+
+async function responseBodyPreview(response: Response) {
+  try {
+    return await response.clone().text()
+  } catch {
+    return "<unable to read response body>"
   }
 }
 
@@ -178,7 +188,23 @@ export default function Home() {
     try {
       const healthRes = await apiFetch("/health")
       if (!healthRes.ok) {
+        const body = await responseBodyPreview(healthRes)
+        console.error("[Pokemon API] Backend healthcheck failed", {
+          url: `${API_BASE_URL}/health`,
+          status: healthRes.status,
+          body,
+        })
         throw new Error(`Backend healthcheck failed with status ${healthRes.status}.`)
+      }
+
+      const healthData = await healthRes.clone().json().catch(() => null)
+      if (healthData?.status !== "healthy") {
+        console.error("[Pokemon API] Backend healthcheck returned unexpected payload", {
+          url: `${API_BASE_URL}/health`,
+          status: healthRes.status,
+          body: healthData,
+        })
+        throw new Error("Backend healthcheck returned an unexpected response.")
       }
 
       const res = await apiFetch(`/search/${encodeURIComponent(normalizedCard)}`)

@@ -32,7 +32,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://pokemon-app-eta-lilac.vercel.app",
     ],
+    allow_origin_regex=r"https://pokemon-app-[a-z0-9-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,16 +54,12 @@ def shutdown():
 
 @app.get("/")
 def root():
-    return {"message": "Pokemon price app running"}
+    return {"status": "ok"}
 
 
 @app.get("/health")
 def healthcheck():
-    return {
-        "status": "ok",
-        "service": "pokemon-price-backend",
-        "port": 8002,
-    }
+    return {"status": "healthy"}
 
 
 async def build_search_response(card_number: str):
