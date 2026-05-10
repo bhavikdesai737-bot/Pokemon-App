@@ -4,7 +4,6 @@ import { useState } from "react"
 import Image from "next/image"
 import CardHeader from "@/components/CardHeader"
 import MarketplaceColumn from "@/components/MarketplaceColumn"
-import PriceHistoryChart, { type PriceHistoryPoint } from "@/components/PriceHistoryChart"
 
 type MarketplaceResult = {
   name: string | null
@@ -58,11 +57,6 @@ type EbayPricingResult = {
   psa: EbayPriceSection
   ace: EbayPriceSection
   error?: string
-}
-
-type HistoryResult = {
-  card_number: string
-  history: PriceHistoryPoint[]
 }
 
 type MarketplaceCard = MarketplaceResult & {
@@ -150,15 +144,21 @@ function normalizeCardNumber(value: string) {
 }
 
 function getConditionRank(condition: string | null | undefined) {
+  if (!condition) {
+    return 5
+  }
+
   const ranks: Record<string, number> = {
     A: 0,
     "A-": 1,
     B: 2,
     "B-": 3,
     C: 4,
+    "N/A": 5,
+    UNKNOWN: 6,
   }
 
-  return condition ? ranks[condition] ?? 99 : 99
+  return ranks[condition.toUpperCase()] ?? 6
 }
 
 function getGradeRank(listing: MarketplaceCard) {
@@ -197,10 +197,57 @@ function splitMarketplaceDataByTab(listings: MarketplaceCard[]) {
   )
 }
 
-function topEbayListings(section: EbayPriceSection) {
+function getEbayConditionRank(condition: string | null | undefined) {
+  if (!condition) {
+    return 6
+  }
+
+  const normalizedCondition = condition.trim().toUpperCase()
+  const conditionRanks: Record<string, number> = {
+    A: 0,
+    "A-": 1,
+    B: 2,
+    "B-": 3,
+    C: 4,
+    "N/A": 5,
+    UNKNOWN: 6,
+  }
+
+  if (normalizedCondition in conditionRanks) {
+    return conditionRanks[normalizedCondition]
+  }
+  if (normalizedCondition.includes("NEAR MINT") || normalizedCondition === "NM") {
+    return 0
+  }
+  if (normalizedCondition.includes("EXCELLENT")) {
+    return 1
+  }
+  if (normalizedCondition.includes("LIGHT")) {
+    return 2
+  }
+  if (normalizedCondition.includes("PLAYED")) {
+    return 3
+  }
+  if (normalizedCondition.includes("POOR") || normalizedCondition.includes("DAMAGED")) {
+    return 4
+  }
+
+  return 5
+}
+
+function topEbayListings(section: EbayPriceSection, tab: ListingTab) {
   return [...(section.listings ?? [])]
     .filter((listing) => typeof listing.price === "number")
-    .sort((a, b) => (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER))
+    .sort((a, b) => {
+      if (tab === "raw") {
+        const conditionDiff = getEbayConditionRank(a.condition) - getEbayConditionRank(b.condition)
+        if (conditionDiff !== 0) {
+          return conditionDiff
+        }
+      }
+
+      return (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER)
+    })
     .slice(0, 5)
 }
 
@@ -227,12 +274,13 @@ function getEbayPricing(result: SearchResult | null): EbayPricingResult | null {
 
 type EbayMarketCardProps = {
   label: string
+  tab: ListingTab
   section: EbayPriceSection
   formatPrice: (price: number | null, currency: string | null) => string
 }
 
-function EbayMarketCard({ label, section, formatPrice }: EbayMarketCardProps) {
-  const topListings = topEbayListings(section)
+function EbayMarketCard({ label, tab, section, formatPrice }: EbayMarketCardProps) {
+  const topListings = topEbayListings(section, tab)
 
   return (
     <article className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 shadow-xl shadow-black/20">
@@ -348,8 +396,7 @@ export default function Home() {
   const [result, setResult] = useState<SearchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([])
-  const [sortOption, setSortOption] = useState<SortOption>("lowest")
+  const [sortOption, setSortOption] = useState<SortOption>("condition")
   const [activeTab, setActiveTab] = useState<ListingTab>("raw")
 
   async function search() {
@@ -397,24 +444,8 @@ export default function Home() {
       const data: SearchResult = await res.json()
       console.log("Full search result", data)
       setResult(data)
-
-      try {
-        const historyRes = await apiFetch(`/history/${encodeURIComponent(normalizedCard)}`)
-        if (!historyRes.ok) {
-          console.warn(`[Pokemon API] History request failed with status ${historyRes.status}`)
-          setPriceHistory([])
-          return
-        }
-
-        const historyData: HistoryResult = await historyRes.json()
-        setPriceHistory(historyData.history)
-      } catch (historyErr) {
-        console.warn("[Pokemon API] History unavailable; continuing without chart data", historyErr)
-        setPriceHistory([])
-      }
     } catch (err) {
       setResult(null)
-      setPriceHistory([])
       setError(err instanceof Error ? err.message : "Something went wrong while searching.")
     } finally {
       setLoading(false)
@@ -580,13 +611,6 @@ export default function Home() {
               formatPrice={formatPrice}
             />
 
-            <PriceHistoryChart
-              history={priceHistory}
-              activeTab={activeTab}
-              formatMarketplaceName={formatMarketplaceName}
-              formatPrice={formatPrice}
-            />
-
             <div className="flex flex-col gap-4 border-b border-white/10 p-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="grid w-full grid-cols-3 rounded-2xl border border-white/10 bg-slate-950/70 p-1 sm:w-auto">
                 {listingTabs.map((tab) => (
@@ -647,6 +671,7 @@ export default function Home() {
                 {activeEbaySection && (
                   <EbayMarketCard
                     label={listingTabs.find((tab) => tab.value === activeTab)?.label ?? "Raw"}
+                    tab={activeTab}
                     section={activeEbaySection}
                     formatPrice={formatPrice}
                   />
