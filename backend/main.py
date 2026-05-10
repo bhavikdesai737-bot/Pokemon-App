@@ -17,6 +17,7 @@ from database.database import (
 )
 from auth.collectr_auth import CollectrAuthError
 from scrapers.collectr import CollectrScrapeError, get_collectr_prices
+from scrapers.ebay import get_ebay_uk_prices
 from services.scheduler import run_scheduled_scrape, start_scheduler, stop_scheduler
 from services.scraping import scrape_and_save_card
 from services.normalize import normalize_card_number
@@ -62,18 +63,38 @@ def healthcheck():
     return {"status": "healthy"}
 
 
+async def get_ebay_uk_response(card_number: str):
+    try:
+        return await asyncio.to_thread(get_ebay_uk_prices, card_number)
+    except Exception as exc:
+        logger.exception("eBay UK lookup failed for card_number=%s", card_number)
+        return {
+            "error": type(exc).__name__,
+            "detail": str(exc),
+            "raw": {"count": 0, "min_price": None, "max_price": None, "average_price": None, "listings": []},
+            "psa": {"count": 0, "min_price": None, "max_price": None, "average_price": None, "listings": []},
+            "ace": {"count": 0, "min_price": None, "max_price": None, "average_price": None, "listings": []},
+        }
+
+
 async def build_search_response(card_number: str):
     normalized_card_number = normalize_card_number(card_number)
     cached_result = await asyncio.to_thread(get_cached_search_result, normalized_card_number)
-    if cached_result:
+    if cached_result and "uk" in cached_result:
         return cached_result
 
-    result = await scrape_and_save_card(normalized_card_number)
+    result, ebay = await asyncio.gather(
+        scrape_and_save_card(normalized_card_number),
+        get_ebay_uk_response(normalized_card_number),
+    )
 
     response = {
         "card_number": result["card_number"],
         "japan": result["japan"],
         "graded": result["graded"],
+        "uk": {
+            "ebay": ebay,
+        },
     }
     await asyncio.to_thread(save_search_cache, normalized_card_number, response)
     return response
